@@ -1,0 +1,537 @@
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  onSnapshot, 
+  Timestamp 
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  ChevronRight, 
+  ChevronLeft, 
+  Book, 
+  Heart, 
+  Zap, 
+  ShieldCheck, 
+  BarChart2, 
+  Download,
+  Play,
+  CheckCircle2,
+  AlertCircle,
+  HelpCircle,
+  ArrowRight,
+  Printer
+} from 'lucide-react';
+
+// --- FIREBASE INITIALIZATION ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'yvonne-fear-intuition-30';
+
+const App = () => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('welcome');
+  const [selectedDay, setSelectedDay] = useState(1);
+
+  // Local state for the journal data
+  const [journalData, setJournalData] = useState({
+    intentions: { why: '', decisions: '', hope: '' },
+    days: Array.from({ length: 30 }, (_, i) => ({
+      day: i + 1,
+      date: '',
+      moment: '',
+      voice: '',
+      signature: '', // Fear, Intuition, Mixed
+      body: '', // Contracted, Expanded, Numb
+      type: '', // Urgency, Clarity
+      learning: ''
+    })),
+    reflection30: {
+      fearCount: 0,
+      intuitionCount: 0,
+      mixedCount: 0,
+      fearSituations: '',
+      intuitionMoments: '',
+      bodySignature: '',
+      transformation: '',
+      letter: ''
+    }
+  });
+
+  // --- AUTH & PRIVATE DATA SYNC ---
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (!u) setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    // Load user's private journal from Firestore (Rule 1 & 3)
+    const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'journal', 'main');
+    const unsub = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setJournalData(docSnap.data());
+      }
+      setLoading(false);
+    }, (err) => {
+      console.error("Firestore sync error:", err);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [user]);
+
+  const saveJournal = async (newData) => {
+    if (!user) return;
+    const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'journal', 'main');
+    await setDoc(userDocRef, {
+      ...newData,
+      updatedAt: Timestamp.now()
+    });
+  };
+
+  const updateIntention = (field, val) => {
+    const next = { ...journalData, intentions: { ...journalData.intentions, [field]: val } };
+    setJournalData(next);
+    saveJournal(next);
+  };
+
+  const updateDay = (dayIndex, field, val) => {
+    const newDays = [...journalData.days];
+    newDays[dayIndex] = { ...newDays[dayIndex], [field]: val };
+    const next = { ...journalData, days: newDays };
+    setJournalData(next);
+    saveJournal(next);
+  };
+
+  const updateReflection = (field, val) => {
+    const next = { ...journalData, reflection30: { ...journalData.reflection30, [field]: val } };
+    setJournalData(next);
+    saveJournal(next);
+  };
+
+  // --- UI HELPERS ---
+  const TabButton = ({ id, label, icon: Icon }) => (
+    <button 
+      onClick={() => setActiveTab(id)}
+      className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all ${activeTab === id ? 'bg-orange-100 text-orange-900 shadow-inner' : 'text-stone-400 hover:bg-stone-100'}`}
+    >
+      <Icon size={20} />
+      <span className="text-[10px] font-bold mt-1 uppercase tracking-tighter">{label}</span>
+    </button>
+  );
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#FDFBF7]">
+      <div className="animate-spin text-orange-800"><Zap size={40} /></div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#FDFBF7] text-stone-800 font-sans pb-24 transition-colors duration-500">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;600;700&display=swap');
+        .font-serif { font-family: 'Libre Baskerville', serif; }
+        .bg-terracotta { background-color: #E2725B; }
+        .text-terracotta { color: #E2725B; }
+        .bg-sage { background-color: #8A9A5B; }
+        .text-sage { color: #8A9A5B; }
+        @media print { 
+            .no-print { display: none !important; } 
+            .print-only { display: block !important; }
+            body { background: white !important; }
+            .container-box { box-shadow: none !important; border: 1px solid #eee !important; padding: 2rem !important; }
+        }
+        .print-only { display: none; }
+      `}</style>
+
+      {/* HEADER */}
+      <div className="bg-white border-b border-orange-50 p-6 no-print">
+        <div className="max-w-4xl mx-auto flex justify-between items-center">
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.3em] uppercase text-orange-800">Healing with Yvonne</p>
+            <h1 className="text-xl font-serif font-bold text-stone-900 italic">Fear vs Intuition Journal</h1>
+          </div>
+          <div className="flex gap-2">
+            <button 
+                onClick={() => window.print()}
+                className="flex items-center gap-2 px-4 py-2 bg-stone-50 text-stone-600 rounded-lg hover:bg-orange-50 transition-colors text-xs font-bold"
+            >
+                <Printer size={16} /> Print Full Journal
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto p-4 pt-8">
+        
+        {/* VIEW 1: WELCOME */}
+        {activeTab === 'welcome' && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+            <div className="text-center space-y-4">
+              <h2 className="text-3xl font-serif italic text-stone-900">Welcome to Your Daily Practice</h2>
+              <p className="text-stone-500 leading-relaxed max-w-2xl mx-auto">
+                Rewire your brain to automatically recognize fear vs. intuition. This is a private space for your own growth and discernment.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-3xl p-8 shadow-xl shadow-orange-900/5 border border-orange-50">
+              <div className="flex flex-col items-center text-center space-y-6">
+                <div className="w-16 h-16 bg-sage/10 rounded-full flex items-center justify-center text-sage">
+                  <Play size={24} fill="currentColor" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="font-bold text-lg">Grounding Practice</h3>
+                  <p className="text-xs text-stone-400 italic">Recommended before each session</p>
+                </div>
+                <audio controls className="w-full filter sepia brightness-90">
+                  <source src="ElevenLabs_Unlocking_Intuition_The_Body's_Hidden_Wisdom_Revealed.mp3" type="audio/mpeg" />
+                </audio>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-8 bg-orange-50/50 rounded-3xl border border-orange-100">
+                <h4 className="font-bold text-orange-900 text-sm mb-2 uppercase tracking-widest">Your Private Space</h4>
+                <p className="text-xs text-orange-800/70 leading-relaxed">
+                  Everything you write here is private. No coach or third party can see your responses. Download your PDF entries to keep them for your own records.
+                </p>
+              </div>
+              <div className="p-8 bg-sage/10 rounded-3xl border border-sage/20">
+                <h4 className="font-bold text-sage text-sm mb-2 uppercase tracking-widest">30-Day Goal</h4>
+                <p className="text-xs text-sage/80 leading-relaxed">
+                  Repetition is the key. By day 30, your system will automatically recognize the "Intuition Signature" before you even start to think.
+                </p>
+              </div>
+            </div>
+
+            <button onClick={() => setActiveTab('intentions')} className="w-full py-5 bg-stone-900 text-white font-bold rounded-2xl shadow-xl hover:bg-stone-800 flex items-center justify-center gap-2 transition-all">
+              Set Your Intentions <ArrowRight size={20} />
+            </button>
+          </div>
+        )}
+
+        {/* VIEW 2: INTENTIONS */}
+        {activeTab === 'intentions' && (
+          <div className="space-y-8 animate-in fade-in">
+            <div className="text-center">
+              <h2 className="text-2xl font-serif text-stone-900">Your Intentions</h2>
+              <p className="text-sm text-stone-400 mt-2 italic">Why are you doing this work?</p>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">1. Your primary "Why"</label>
+                <textarea 
+                  className="w-full bg-white border border-stone-200 p-6 rounded-3xl h-32 focus:ring-2 focus:ring-orange-200 outline-none transition-shadow"
+                  placeholder="Example: I want to trust my gut more in my career..."
+                  value={journalData.intentions.why}
+                  onChange={(e) => updateIntention('why', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">2. Decisions you are navigating</label>
+                <textarea 
+                  className="w-full bg-white border border-stone-200 p-6 rounded-3xl h-32 focus:ring-2 focus:ring-orange-200 outline-none transition-shadow"
+                  placeholder="Big decisions or small daily choices..."
+                  value={journalData.intentions.decisions}
+                  onChange={(e) => updateIntention('decisions', e.target.value)}
+                />
+              </div>
+            </div>
+
+            <button onClick={() => setActiveTab('reference')} className="w-full py-5 bg-stone-900 text-white font-bold rounded-2xl shadow-lg">Continue to Quick Reference</button>
+          </div>
+        )}
+
+        {/* VIEW 3: QUICK REFERENCE */}
+        {activeTab === 'reference' && (
+          <div className="space-y-8 animate-in fade-in">
+            <div className="text-center">
+              <h2 className="text-2xl font-serif text-stone-900">The Signatures</h2>
+              <p className="text-sm text-stone-400 mt-2 italic">Keep this page bookmarked—refer to it daily.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="p-8 bg-orange-50 rounded-[2.5rem] border border-orange-100">
+                <div className="flex items-center gap-2 mb-4 text-orange-900">
+                  <AlertCircle size={24} />
+                  <h3 className="font-bold text-xl uppercase tracking-tighter">Fear Signature</h3>
+                </div>
+                <ul className="space-y-3 text-sm text-orange-800/70">
+                  <li>• <strong>Loud</strong> – Yelling, demanding, urgent</li>
+                  <li>• <strong>Repetitive</strong> – Loops same thought</li>
+                  <li>• <strong>Contracting</strong> – Body tightens, heavy</li>
+                  <li>• <strong>External</strong> – Worried about judgment/loss</li>
+                </ul>
+                <p className="mt-6 font-serif italic text-orange-900 border-t border-orange-200 pt-4">"Don't. Stay safe."</p>
+              </div>
+
+              <div className="p-8 bg-emerald-50 rounded-[2.5rem] border border-emerald-100">
+                <div className="flex items-center gap-2 mb-4 text-emerald-900">
+                  <CheckCircle2 size={24} />
+                  <h3 className="font-bold text-xl uppercase tracking-tighter">Intuition Signature</h3>
+                </div>
+                <ul className="space-y-3 text-sm text-emerald-800/70">
+                  <li>• <strong>Quiet</strong> – Whisper, gentle knowing</li>
+                  <li>• <strong>Persistent</strong> – Nudges, doesn't force</li>
+                  <li>• <strong>Expanding</strong> – Body opens, softens</li>
+                  <li>• <strong>Internal</strong> – Focused on alignment/truth</li>
+                </ul>
+                <p className="mt-6 font-serif italic text-emerald-900 border-t border-emerald-200 pt-4">"This is the way."</p>
+              </div>
+            </div>
+
+            <div className="bg-stone-900 text-white p-8 rounded-3xl shadow-xl">
+              <h4 className="text-center font-serif italic text-lg mb-6 text-orange-200">The Fastest Check</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center text-[10px] uppercase tracking-widest font-bold">
+                <div className="space-y-1">
+                  <p className="text-stone-400">Urgency or Clarity?</p>
+                  <p className="text-emerald-400">Clarity = Intuition</p>
+                </div>
+                <div className="space-y-1 border-x border-stone-800 px-4">
+                  <p className="text-stone-400">Contract or Expand?</p>
+                  <p className="text-emerald-400">Expand = Intuition</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-stone-400">If no one judged me?</p>
+                  <p className="text-emerald-400">That = Intuition</p>
+                </div>
+              </div>
+            </div>
+
+            <button onClick={() => setActiveTab('journal')} className="w-full py-5 bg-stone-900 text-white font-bold rounded-2xl shadow-xl">Enter 30-Day Journal</button>
+          </div>
+        )}
+
+        {/* VIEW 4: JOURNAL */}
+        {activeTab === 'journal' && (
+          <div className="space-y-8 animate-in fade-in">
+            <div className="flex flex-wrap justify-center gap-2 no-print">
+              {journalData.days.map((d, i) => (
+                <button 
+                  key={i}
+                  onClick={() => setSelectedDay(d.day)}
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold transition-all border ${selectedDay === d.day ? 'bg-stone-900 text-white scale-110 shadow-lg border-stone-900' : d.moment ? 'bg-orange-100 text-orange-900 border-orange-200' : 'bg-white border-stone-100 text-stone-300 hover:border-orange-200'}`}
+                >
+                  {d.day}
+                </button>
+              ))}
+            </div>
+
+            <div className="bg-white rounded-[2.5rem] p-8 sm:p-12 border border-stone-50 shadow-xl relative container-box">
+              <div className="flex justify-between items-start mb-10">
+                <div>
+                  <h2 className="text-3xl font-serif italic text-stone-900">Day {selectedDay}</h2>
+                  <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-1">Daily Discernment Tracker</p>
+                </div>
+                <div className="flex flex-col items-end gap-2 no-print">
+                    <input 
+                      type="text" 
+                      placeholder="Date" 
+                      className="text-right text-xs font-bold uppercase text-stone-400 outline-none border-b border-transparent focus:border-orange-100"
+                      value={journalData.days[selectedDay-1].date}
+                      onChange={(e) => updateDay(selectedDay-1, 'date', e.target.value)}
+                    />
+                    <button 
+                        onClick={() => window.print()}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-stone-900 text-white text-[10px] font-bold rounded-lg uppercase tracking-wider hover:bg-stone-800 transition-all shadow-md"
+                    >
+                        <Download size={12} /> Download Day {selectedDay}
+                    </button>
+                </div>
+              </div>
+
+              <div className="space-y-10">
+                <div className="space-y-3">
+                  <label className="text-[10px] font-extrabold text-stone-400 uppercase tracking-widest flex items-center gap-2">
+                    <HelpCircle size={12} /> Today's moment of uncertainty
+                  </label>
+                  <textarea 
+                    className="w-full bg-stone-50/50 border border-stone-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-orange-100 transition-all h-24 text-sm leading-relaxed"
+                    placeholder="What choice, conflict, or moment came up today?"
+                    value={journalData.days[selectedDay-1].moment}
+                    onChange={(e) => updateDay(selectedDay-1, 'moment', e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[10px] font-extrabold text-stone-400 uppercase tracking-widest flex items-center gap-2">
+                    <Zap size={12} /> What voice was LOUDEST?
+                  </label>
+                  <textarea 
+                    className="w-full bg-stone-50/50 border border-stone-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-orange-100 transition-all h-24 text-sm italic"
+                    placeholder="Write exactly what it said—raw and unfiltered..."
+                    value={journalData.days[selectedDay-1].voice}
+                    onChange={(e) => updateDay(selectedDay-1, 'voice', e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 no-print">
+                  <div className="space-y-4">
+                    <p className="text-[10px] font-extrabold text-stone-400 uppercase tracking-widest">Signature Check</p>
+                    <div className="flex gap-2">
+                      {['Fear', 'Intuition', 'Mixed'].map(s => (
+                        <button 
+                          key={s} 
+                          onClick={() => updateDay(selectedDay-1, 'signature', s)}
+                          className={`flex-1 py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all border ${journalData.days[selectedDay-1].signature === s ? 'bg-stone-900 text-white border-stone-900 shadow-lg' : 'bg-white text-stone-400 border-stone-100 hover:border-orange-200'}`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <p className="text-[10px] font-extrabold text-stone-400 uppercase tracking-widest">Urgency or Clarity?</p>
+                    <div className="flex gap-2">
+                      {['Urgency', 'Clarity'].map(t => (
+                        <button 
+                          key={t} 
+                          onClick={() => updateDay(selectedDay-1, 'type', t)}
+                          className={`flex-1 py-3 px-2 rounded-xl text-[10px] font-bold uppercase transition-all border ${journalData.days[selectedDay-1].type === t ? 'bg-stone-900 text-white border-stone-900 shadow-lg' : 'bg-white text-stone-400 border-stone-100 hover:border-orange-200'}`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Print View Helpers */}
+                <div className="print-only space-y-4 mt-8">
+                    <p className="text-sm"><strong>Signature Identified:</strong> {journalData.days[selectedDay-1].signature || 'N/A'}</p>
+                    <p className="text-sm"><strong>Response Type:</strong> {journalData.days[selectedDay-1].type || 'N/A'}</p>
+                </div>
+
+                <div className="space-y-3 border-t border-stone-50 pt-8">
+                  <label className="text-[10px] font-extrabold text-stone-400 uppercase tracking-widest flex items-center gap-2">
+                    <Heart size={12} /> What I'm learning
+                  </label>
+                  <input 
+                    className="w-full bg-stone-50/50 border border-stone-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-orange-100 transition-all text-sm"
+                    value={journalData.days[selectedDay-1].learning}
+                    onChange={(e) => updateDay(selectedDay-1, 'learning', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-12 flex justify-between gap-4 no-print">
+                <button 
+                  disabled={selectedDay === 1}
+                  onClick={() => setSelectedDay(prev => prev - 1)}
+                  className="px-6 py-4 border border-stone-200 rounded-2xl text-stone-400 disabled:opacity-20 hover:border-orange-200 transition-all"
+                >
+                  <ChevronLeft />
+                </button>
+                <button 
+                  disabled={selectedDay === 30}
+                  onClick={() => setSelectedDay(prev => prev + 1)}
+                  className="flex-1 py-4 bg-stone-900 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:bg-stone-800 transition-all"
+                >
+                  Save & Next Day <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 5: REFLECTION */}
+        {activeTab === 'reflection' && (
+          <div className="space-y-8 animate-in fade-in">
+            <div className="text-center">
+              <h2 className="text-2xl font-serif text-stone-900 italic">30-Day Integration</h2>
+              <p className="text-sm text-stone-400 mt-2">Reflect on your growth and transformation.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+               <div className="p-6 bg-white rounded-3xl border border-stone-100 text-center shadow-sm">
+                  <p className="text-[10px] font-bold text-stone-400 uppercase mb-2">Fear Count</p>
+                  <input type="number" className="text-3xl font-serif w-full text-center outline-none bg-transparent" value={journalData.reflection30.fearCount} onChange={e => updateReflection('fearCount', e.target.value)} />
+                  <p className="text-[10px] text-stone-300 mt-2">/ 30 Days</p>
+               </div>
+               <div className="p-6 bg-white rounded-3xl border border-stone-100 text-center shadow-sm">
+                  <p className="text-[10px] font-bold text-stone-400 uppercase mb-2">Intuition Count</p>
+                  <input type="number" className="text-3xl font-serif w-full text-center outline-none bg-transparent" value={journalData.reflection30.intuitionCount} onChange={e => updateReflection('intuitionCount', e.target.value)} />
+                  <p className="text-[10px] text-stone-300 mt-2">/ 30 Days</p>
+               </div>
+               <div className="p-6 bg-white rounded-3xl border border-stone-100 text-center shadow-sm">
+                  <p className="text-[10px] font-bold text-stone-400 uppercase mb-2">Mixed / Unclear</p>
+                  <input type="number" className="text-3xl font-serif w-full text-center outline-none bg-transparent" value={journalData.reflection30.mixedCount} onChange={e => updateReflection('mixedCount', e.target.value)} />
+                  <p className="text-[10px] text-stone-300 mt-2">/ 30 Days</p>
+               </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">My fear shows up most often when:</label>
+                <textarea className="w-full bg-white border border-stone-200 p-6 rounded-3xl h-24 outline-none focus:ring-2 focus:ring-orange-100" value={journalData.reflection30.fearSituations} onChange={e => updateReflection('fearSituations', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">My intuition is most clear when:</label>
+                <textarea className="w-full bg-white border border-stone-200 p-6 rounded-3xl h-24 outline-none focus:ring-2 focus:ring-orange-100" value={journalData.reflection30.intuitionMoments} onChange={e => updateReflection('intuitionMoments', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Transformation Letter (To yourself 30 days ago):</label>
+                <textarea className="w-full bg-white border border-stone-200 p-8 rounded-3xl h-64 outline-none italic text-sm leading-relaxed focus:ring-2 focus:ring-orange-100 shadow-inner" placeholder="Dearest self, I want you to know..." value={journalData.reflection30.letter} onChange={e => updateReflection('letter', e.target.value)} />
+              </div>
+            </div>
+
+            <div className="p-10 bg-stone-900 text-white rounded-[3rem] text-center space-y-6 shadow-2xl">
+              <h3 className="text-2xl font-serif italic">Transformation Check.</h3>
+              <p className="text-stone-400 text-sm leading-relaxed max-w-lg mx-auto">
+                Repetition is rewiring. Download your full 30-day journey to keep in your healing records.
+              </p>
+              <button onClick={() => window.print()} className="bg-orange-500 text-white px-10 py-4 rounded-2xl font-bold hover:bg-orange-400 transition-all shadow-xl flex items-center gap-2 mx-auto uppercase tracking-widest text-xs">
+                <Download size={20} /> Download Final Records
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* BOTTOM NAV */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-orange-50 p-4 no-print z-40">
+        <div className="max-w-md mx-auto flex justify-between px-2">
+          <TabButton id="welcome" label="Start" icon={Play} />
+          <TabButton id="intentions" label="Goals" icon={ShieldCheck} />
+          <TabButton id="reference" label="Ref" icon={HelpCircle} />
+          <TabButton id="journal" label="Journal" icon={Book} />
+          <TabButton id="reflection" label="Final" icon={BarChart2} />
+        </div>
+      </div>
+
+      {/* FOOTER */}
+      <div className="mt-12 text-center pb-8 no-print">
+        <p className="text-[9px] text-stone-300 uppercase tracking-widest font-bold">&copy; 2025 Healing with Yvonne</p>
+      </div>
+
+    </div>
+  );
+};
+
+export default App;
